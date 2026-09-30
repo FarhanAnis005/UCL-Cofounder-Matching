@@ -290,7 +290,7 @@ function FeedContent() {
               }`}
             >
               <Flame className="h-4 w-4 text-amber-300" />
-              <span>Match Deck (Dating Mode)</span>
+              <span>Match Deck</span>
             </button>
             <button
               type="button"
