@@ -112,7 +112,14 @@ export function EditProfileModal({
       setErrorMsg('Full name is required.');
       return;
     }
-    if (!isValidE164(phone)) {
+
+    let cleanPhoneVal = phone.trim();
+    if (cleanPhoneVal.startsWith('07') && cleanPhoneVal.replace(/\D/g, '').length === 11) {
+      cleanPhoneVal = '+44' + cleanPhoneVal.replace(/^0+/, '');
+      setPhone(cleanPhoneVal);
+    }
+
+    if (!isValidE164(cleanPhoneVal)) {
       setErrorMsg('Phone must start with a valid country code (e.g. +44...).');
       return;
     }
@@ -142,7 +149,7 @@ export function EditProfileModal({
           bio: bio.trim(),
           looking_for: lookingFor,
           industries,
-          phone: phone.trim(),
+          phone: cleanPhoneVal,
           ucl_department: department,
           graduation_year: gradYear,
           linkedin_url: linkedinUrl.trim(),

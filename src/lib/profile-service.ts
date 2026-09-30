@@ -350,13 +350,15 @@ export async function signOutUser(): Promise<void> {
 }
 
 export async function deleteProfile(profileId: string): Promise<{ success: boolean; error?: string }> {
+  let prismaSuccess = false;
+
   // 1. Primary: Delete via Prisma API endpoint
   try {
     const res = await fetch(`/api/profiles?id=${encodeURIComponent(profileId)}`, {
       method: 'DELETE',
     });
     if (res.ok) {
-      // deleted successfully via Prisma
+      prismaSuccess = true;
     }
   } catch (apiErr) {
     console.warn('Prisma API delete error:', apiErr);
@@ -408,7 +410,10 @@ export async function deleteProfile(profileId: string): Promise<{ success: boole
     }
   }
 
-  return { success: !supabaseError, error: supabaseError };
+  return {
+    success: prismaSuccess || !supabaseError,
+    error: prismaSuccess ? undefined : supabaseError,
+  };
 }
 
 export function clearLocalTestProfiles(): void {

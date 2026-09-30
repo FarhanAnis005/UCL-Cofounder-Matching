@@ -56,7 +56,12 @@ export function OnboardingStep4({
 
   const handleSubmit = async () => {
     setTouched(true);
-    if (!phoneValid) return;
+    let currentPhone = formData.phone.trim();
+    if (currentPhone.startsWith('07') && currentPhone.replace(/\D/g, '').length === 11) {
+      currentPhone = '+44' + currentPhone.replace(/^0+/, '');
+      updateFormData({ phone: currentPhone });
+    }
+    if (!isValidE164(currentPhone)) return;
 
     try {
       confetti({
@@ -121,6 +126,12 @@ export function OnboardingStep4({
               onChange={(e) => {
                 setTouched(true);
                 updateFormData({ phone: e.target.value.trim() });
+              }}
+              onBlur={() => {
+                const val = formData.phone.trim();
+                if (val.startsWith('07') && val.replace(/\D/g, '').length === 11) {
+                  updateFormData({ phone: '+44' + val.replace(/^0+/, '') });
+                }
               }}
               placeholder="+447700900123"
               className={`h-12 pl-4 pr-10 text-base font-mono bg-slate-950/80 ${
