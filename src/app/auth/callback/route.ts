@@ -3,10 +3,18 @@ import { createClient } from '@/lib/supabase/server';
 import { type EmailOtpType } from '@supabase/supabase-js';
 
 export async function GET(request: Request) {
-  const { searchParams, origin } = new URL(request.url);
+  const requestUrl = new URL(request.url);
+  const { searchParams } = requestUrl;
   const code = searchParams.get('code');
   const token_hash = searchParams.get('token_hash');
   const type = searchParams.get('type') as EmailOtpType | null;
+
+  // Safely extract public origin for Vercel edge/serverless proxy and custom domains
+  const forwardedHost = request.headers.get('x-forwarded-host');
+  const forwardedProto = request.headers.get('x-forwarded-proto') || 'https';
+  const origin = forwardedHost
+    ? `${forwardedProto}://${forwardedHost}`
+    : requestUrl.origin;
 
   const supabase = await createClient();
 
