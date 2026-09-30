@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { createClient, isSupabaseConfigured } from '@/lib/supabase/client';
+import { createClient } from '@/lib/supabase/client';
 import { getCurrentUserProfile, signOutUser } from '@/lib/profile-service';
 import { isUclEmail, getUclEmailError } from '@/lib/auth-utils';
 import { Button } from '@/components/ui/button';
@@ -14,7 +14,6 @@ import {
   ShieldCheck,
   Zap,
   Users,
-  Database,
   Mail,
   Lock,
   Eye,
@@ -28,7 +27,6 @@ import {
   KeyRound,
   Info,
 } from 'lucide-react';
-import { SupabaseSetupModal } from '@/components/SupabaseSetupModal';
 import { AvatarUpload } from '@/components/ui/avatar-upload';
 
 type AuthMode = 'signup' | 'signin';
@@ -43,13 +41,9 @@ export default function LandingPage() {
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [infoMessage, setInfoMessage] = useState('');
-  const [isConfigured, setIsConfigured] = useState(false);
-  const [showDbModal, setShowDbModal] = useState(false);
   const [loggedInUser, setLoggedInUser] = useState<{ id: string; email: string } | null>(null);
 
   useEffect(() => {
-    setIsConfigured(isSupabaseConfigured());
-
     const supabase = createClient();
     if (supabase) {
       // Check current session
@@ -270,17 +264,6 @@ export default function LandingPage() {
         </div>
 
         <div className="flex items-center gap-3">
-          <button
-            onClick={() => setShowDbModal(true)}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-1.5 text-xs text-slate-300 hover:border-slate-700 hover:text-white transition-colors"
-          >
-            <Database className="h-3.5 w-3.5 text-sky-400" />
-            <span className="hidden sm:inline">Supabase:</span>
-            <span className={isConfigured ? 'text-emerald-400 font-medium' : 'text-amber-400 font-medium'}>
-              {isConfigured ? 'Live' : 'Ready / Schema'}
-            </span>
-          </button>
-
           <Link href="/feed">
             <Button variant="ghost" size="sm" className="text-xs text-slate-300 hover:text-white">
               Browse Directory &rarr;
@@ -618,15 +601,8 @@ export default function LandingPage() {
         <p>© UCL Cohort Network • Built for UCL Founders & Builders</p>
         <p className="flex items-center gap-2">
           <span>Powered by Next.js & Supabase</span>
-          <span>•</span>
-          <button onClick={() => setShowDbModal(true)} className="text-sky-400 hover:underline">
-            View Supabase Schema
-          </button>
         </p>
       </footer>
-
-      {/* Supabase modal */}
-      <SupabaseSetupModal isOpen={showDbModal} onClose={() => setShowDbModal(false)} isConfigured={isConfigured} />
     </div>
   );
 }
