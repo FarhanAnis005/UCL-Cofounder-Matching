@@ -66,32 +66,59 @@ export async function getCurrentUserProfile(): Promise<Profile | null> {
 
       if (user) {
         authUser = user;
+      } else {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        if (session?.user) {
+          authUser = session.user;
+        }
+      }
 
+      if (authUser) {
         // 1. Try fetching profile by Supabase auth ID
         const { data, error } = await supabase
           .from('profiles')
           .select('*')
-          .eq('id', user.id)
+          .eq('id', authUser.id)
           .maybeSingle();
 
         if (!error && data) {
           const profile = data as Profile;
-          if (user.email && !profile.email) profile.email = user.email;
+          if (authUser.email && !profile.email) profile.email = authUser.email;
           return profile;
         }
 
         // 2. Try fetching profile by email in case ID differed
-        if (user.email) {
+        if (authUser.email) {
           const { data: dataByEmail, error: emailErr } = await supabase
             .from('profiles')
             .select('*')
-            .eq('email', user.email)
+            .eq('email', authUser.email)
             .maybeSingle();
 
           if (!emailErr && dataByEmail) {
             return dataByEmail as Profile;
           }
         }
+
+        // 3. Fallback to Prisma API endpoint
+        try {
+          const res = await fetch('/api/profiles', { cache: 'no-store' });
+          if (res.ok) {
+            const apiData = await res.json();
+            if (apiData?.profiles && Array.isArray(apiData.profiles)) {
+              const matched = (apiData.profiles as Profile[]).find(
+                (p) =>
+                  p.id === authUser!.id ||
+                  (p.email &&
+                    authUser!.email &&
+                    p.email.toLowerCase() === authUser!.email.toLowerCase())
+              );
+              if (matched) return matched;
+            }
+          }
+        } catch {}
       }
     } catch (err) {
       console.warn('Error fetching Supabase user profile:', err);

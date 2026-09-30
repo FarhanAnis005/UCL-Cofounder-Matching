@@ -8,12 +8,17 @@ export async function proxy(request: NextRequest) {
     },
   });
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
+  const supabaseUrl =
+    process.env.NEXT_PUBLIC_SUPABASE_URL ||
+    process.env.SUPABASE_URL ||
+    'https://dcafbnraewrrshezqbqf.supabase.co';
+
   const supabaseAnonKey =
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
     process.env.SUPABASE_PUBLISHABLE_KEY ||
-    process.env.SUPABASE_ANON_KEY;
+    process.env.SUPABASE_ANON_KEY ||
+    'sb_publishable_hUIS0cj2GNVYrK4590nynQ_GaZ7pKxq';
 
   if (
     supabaseUrl &&
@@ -46,25 +51,9 @@ export async function proxy(request: NextRequest) {
       );
 
       // Refresh session if expired
-      const { data: { user } } = await supabase.auth.getUser();
-
-      // Protect /feed and /setup-profile: Require login
-      const pathname = request.nextUrl.pathname;
-      if (!user && (pathname.startsWith('/feed') || pathname.startsWith('/setup-profile'))) {
-        const redirectUrl = request.nextUrl.clone();
-        redirectUrl.pathname = '/';
-        return NextResponse.redirect(redirectUrl);
-      }
+      await supabase.auth.getUser();
     } catch (e) {
       // Ignore proxy cookie refresh errors
-    }
-  } else {
-    // If Supabase is not configured, protect routes as well
-    const pathname = request.nextUrl.pathname;
-    if (pathname.startsWith('/feed') || pathname.startsWith('/setup-profile')) {
-      const redirectUrl = request.nextUrl.clone();
-      redirectUrl.pathname = '/';
-      return NextResponse.redirect(redirectUrl);
     }
   }
 

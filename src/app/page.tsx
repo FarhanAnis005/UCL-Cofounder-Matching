@@ -102,25 +102,43 @@ export default function LandingPage() {
   };
 
   // Route user based on whether they have completed their profile
+  // Route user based on whether they have completed their profile
   const handlePostAuthRouting = async (userId: string, userEmail: string) => {
+    // 1. Check Supabase profiles table
     const supabase = createClient();
     if (supabase) {
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('id, phone')
-        .eq('id', userId)
-        .maybeSingle();
+      try {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('id, phone')
+          .or(`id.eq.${userId},email.eq.${userEmail}`)
+          .maybeSingle();
 
-      if (profile && profile.phone) {
-        router.push('/feed');
-        return;
-      }
+        if (profile && profile.phone) {
+          router.push('/feed');
+          return;
+        }
+      } catch {}
     }
-    // Student without completed profile
-    router.push(`/setup-profile?email=${encodeURIComponent(userEmail)}`);
+
+    // 2. Check Prisma API
+    try {
+      const res = await fetch('/api/profiles');
+      if (res.ok) {
+        const { profiles } = await res.json();
+        const found = profiles?.find((p: any) => p.id === userId || (p.email && p.email.toLowerCase() === userEmail.toLowerCase()));
+        if (found && found.phone) {
+          router.push('/feed');
+          return;
+        }
+      }
+    } catch {}
+
+    // Existing users go directly to directory feed
+    router.push('/feed');
   };
 
-  // Handle Sign Up
+  // Handle Sign Up (with smart auto-login for existing users)
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validateInputs()) return;
@@ -136,9 +154,8 @@ export default function LandingPage() {
     const supabase = createClient();
 
     if (!supabase) {
-      // Fallback preview mode when keys are not configured yet
       setLoading(false);
-      router.push(`/setup-profile?email=${encodeURIComponent(email.trim().toLowerCase())}`);
+      router.push('/feed');
       return;
     }
 
@@ -154,25 +171,46 @@ export default function LandingPage() {
         },
       });
 
-      if (error) {
-        if (error.message.toLowerCase().includes('already registered')) {
-          setErrorMessage('This UCL email is already registered. Please switch to the Sign In tab.');
+      // Detect if user already exists (by error message, error code, or empty identities)
+      const isAlreadyRegistered =
+        (error && (
+          error.message.toLowerCase().includes('already registered') ||
+          error.message.toLowerCase().includes('user already exists') ||
+          (error as any)?.code === 'user_already_exists'
+        )) ||
+        (data?.user && (!data.user.identities || data.user.identities.length === 0));
+
+      if (isAlreadyRegistered) {
+        // Automatically sign them in and send to dashboard!
+        const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+          email: cleanEmail,
+          password: password,
+        });
+
+        if (!signInError && signInData.user) {
+          setLoggedInUser({ id: signInData.user.id, email: signInData.user.email || cleanEmail });
+          router.push('/feed');
+          return;
+        } else if (signInError) {
+          setErrorMessage('This UCL email is already registered. Please check your password or switch to Sign In.');
           setAuthMode('signin');
-        } else {
-          setErrorMessage(error.message);
+          return;
         }
+      }
+
+      if (error) {
+        setErrorMessage(error.message);
         return;
       }
 
-      // If Supabase has "Confirm email" disabled, session is returned immediately!
       if (data.session && data.user) {
         setLoggedInUser({ id: data.user.id, email: data.user.email || cleanEmail });
-        await handlePostAuthRouting(data.user.id, cleanEmail);
+        router.push(`/setup-profile?email=${encodeURIComponent(cleanEmail)}`);
       } else if (data.user) {
-        // If email confirmation is still turned on in their Supabase dashboard
         setInfoMessage(
-          'Account created! If your Supabase project requires email confirmation, please check your UCL inbox. (Tip: Turn off "Confirm email" in Supabase to log in instantly without email confirmation).'
+          'Account created! Directing to directory...'
         );
+        router.push('/feed');
       }
     } catch (err: any) {
       setErrorMessage(err?.message || 'Failed to create account.');
@@ -218,7 +256,7 @@ export default function LandingPage() {
 
       if (data.user) {
         setLoggedInUser({ id: data.user.id, email: data.user.email || cleanEmail });
-        await handlePostAuthRouting(data.user.id, cleanEmail);
+        router.push('/feed');
       }
     } catch (err: any) {
       setErrorMessage(err?.message || 'Failed to sign in.');

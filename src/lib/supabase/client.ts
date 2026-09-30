@@ -1,12 +1,18 @@
 import { createBrowserClient } from '@supabase/ssr';
 
 export const getSupabaseConfig = () => {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
+  const url =
+    process.env.NEXT_PUBLIC_SUPABASE_URL ||
+    process.env.SUPABASE_URL ||
+    'https://dcafbnraewrrshezqbqf.supabase.co';
+
   const anonKey =
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
     process.env.SUPABASE_PUBLISHABLE_KEY ||
-    process.env.SUPABASE_ANON_KEY;
+    process.env.SUPABASE_ANON_KEY ||
+    'sb_publishable_hUIS0cj2GNVYrK4590nynQ_GaZ7pKxq';
+
   return { url, anonKey };
 };
 

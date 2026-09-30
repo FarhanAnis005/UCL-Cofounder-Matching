@@ -60,17 +60,26 @@ function FeedContent() {
       let authUserEmail = '';
 
       if (supabase) {
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
+        let authUser: { id: string; email?: string } | null = null;
+        try {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user) authUser = user;
+        } catch (e) {}
 
-        if (!user) {
+        if (!authUser) {
+          try {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session?.user) authUser = session.user;
+          } catch (e) {}
+        }
+
+        if (!authUser) {
           // Unauthenticated! Redirect directly to landing page
           router.replace('/');
           return;
         }
-        authUserId = user.id;
-        authUserEmail = user.email || '';
+        authUserId = authUser.id;
+        authUserEmail = authUser.email || '';
       }
 
       // Check user profile
