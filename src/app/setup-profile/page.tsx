@@ -106,11 +106,15 @@ function SetupProfileContent() {
           ...prev,
           avatar_url: userAvatar || prev.avatar_url,
         }));
+      } else {
+        // Not authenticated
+        router.replace('/');
+        return;
       }
     }
 
     loadInitialData();
-  }, [emailParam]);
+  }, [emailParam, router]);
 
   const handleSignOut = async () => {
     await signOutUser();

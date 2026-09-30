@@ -46,9 +46,25 @@ export async function proxy(request: NextRequest) {
       );
 
       // Refresh session if expired
-      await supabase.auth.getUser();
+      const { data: { user } } = await supabase.auth.getUser();
+
+      // Protect /feed and /setup-profile: Require login
+      const pathname = request.nextUrl.pathname;
+      if (!user && (pathname.startsWith('/feed') || pathname.startsWith('/setup-profile'))) {
+        const redirectUrl = request.nextUrl.clone();
+        redirectUrl.pathname = '/';
+        return NextResponse.redirect(redirectUrl);
+      }
     } catch (e) {
       // Ignore proxy cookie refresh errors
+    }
+  } else {
+    // If Supabase is not configured, protect routes as well
+    const pathname = request.nextUrl.pathname;
+    if (pathname.startsWith('/feed') || pathname.startsWith('/setup-profile')) {
+      const redirectUrl = request.nextUrl.clone();
+      redirectUrl.pathname = '/';
+      return NextResponse.redirect(redirectUrl);
     }
   }
 

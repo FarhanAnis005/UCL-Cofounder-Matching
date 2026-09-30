@@ -26,6 +26,12 @@ export function Navbar() {
     // 2. Real-time auth state listener
     const supabase = createClient();
     if (supabase) {
+      supabase.auth.getUser().then(({ data: { user } }) => {
+        if (user?.email) {
+          setUserEmail(user.email);
+        }
+      });
+
       const {
         data: { subscription },
       } = supabase.auth.onAuthStateChange(async (_event, session) => {
@@ -91,7 +97,7 @@ export function Navbar() {
             </Button>
           </Link>
 
-          {/* Profile / Edit or Join */}
+          {/* Profile / Edit or Complete */}
           {currentUser ? (
             <Link href="/setup-profile">
               <Button variant="outline" size="sm" className="gap-1.5 border-slate-700 text-xs">
@@ -109,28 +115,19 @@ export function Navbar() {
                 <span>Complete Profile</span>
               </Button>
             </Link>
-          ) : (
-            <Link href="/setup-profile">
-              <Button size="sm" className="gap-1.5 bg-sky-500 hover:bg-sky-400 text-slate-950 font-semibold text-xs">
-                <PlusCircle className="h-3.5 w-3.5" />
-                <span>Join Cohort</span>
-              </Button>
-            </Link>
-          )}
+          ) : null}
 
-          {/* Prominent Log Out Button */}
-          {isLoggedIn && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleSignOut}
-              className="gap-1.5 border-slate-700/80 bg-slate-900/60 hover:bg-rose-950/40 hover:border-rose-500/50 text-slate-300 hover:text-rose-300 text-xs font-semibold rounded-xl transition-all"
-              title={`Log out (${userEmail || currentUser?.email || 'session'})`}
-            >
-              <LogOut className="h-3.5 w-3.5 text-rose-400" />
-              <span>Log Out</span>
-            </Button>
-          )}
+          {/* Always Available Log Out Button */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleSignOut}
+            className="gap-1.5 border-slate-700/80 bg-slate-900/60 hover:bg-rose-950/40 hover:border-rose-500/50 text-slate-300 hover:text-rose-300 text-xs font-semibold rounded-xl transition-all"
+            title={`Log out (${userEmail || currentUser?.email || 'session'})`}
+          >
+            <LogOut className="h-3.5 w-3.5 text-rose-400" />
+            <span>Log Out</span>
+          </Button>
         </div>
       </div>
     </header>

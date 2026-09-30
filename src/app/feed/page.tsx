@@ -1,9 +1,10 @@
 'use client';
 
 import React, { useState, useEffect, useMemo, Suspense } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { Profile, LookingFor, CurrentFocus, Superpower } from '@/lib/types';
 import { getProfiles, getCurrentUserProfile } from '@/lib/profile-service';
+import { createClient } from '@/lib/supabase/client';
 import { isSameUser } from '@/lib/utils';
 import { Navbar } from '@/components/Navbar';
 import { FeedFilters } from '@/components/FeedFilters';
@@ -31,6 +32,7 @@ import {
 import Link from 'next/link';
 
 function FeedContent() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const showWelcome = searchParams.get('welcome') === 'true';
 
@@ -50,28 +52,66 @@ function FeedContent() {
   const [profileToEdit, setProfileToEdit] = useState<Profile | null>(null);
 
   useEffect(() => {
-    // 1. Instant optimistic read from local storage so currentUser is available immediately without waiting
-    if (typeof window !== 'undefined') {
-      const cached = localStorage.getItem('ucl_current_user_v1');
-      if (cached) {
-        try {
-          const parsed = JSON.parse(cached);
-          if (parsed && (parsed.id || parsed.full_name)) {
-            setCurrentUser(parsed);
-          }
-        } catch {}
+    let isMounted = true;
+
+    async function checkAuthAndLoad() {
+      const supabase = createClient();
+      let authUserId = '';
+      let authUserEmail = '';
+
+      if (supabase) {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+
+        if (!user) {
+          // Unauthenticated! Redirect directly to landing page
+          router.replace('/');
+          return;
+        }
+        authUserId = user.id;
+        authUserEmail = user.email || '';
+      }
+
+      // Check user profile
+      const userProfile = await getCurrentUserProfile();
+
+      if (!isMounted) return;
+
+      if (userProfile) {
+        setCurrentUser(userProfile);
+      } else if (authUserId) {
+        setCurrentUser({
+          id: authUserId,
+          full_name: 'UCL Member',
+          email: authUserEmail,
+          phone: '',
+          bio: '',
+          current_focus: 'Building a Startup',
+          superpowers: [],
+          looking_for: [],
+          industries: [],
+        });
+      } else {
+        // Fallback: Not logged in
+        router.replace('/');
+        return;
+      }
+
+      // Load cohort profiles
+      const cohort = await getProfiles();
+      if (isMounted) {
+        setProfiles(cohort);
+        setLoading(false);
       }
     }
 
-    // 2. Fetch full cohort profiles and authenticated user
-    Promise.all([getProfiles(), getCurrentUserProfile()]).then(([cohort, user]) => {
-      setProfiles(cohort);
-      if (user) {
-        setCurrentUser(user);
-      }
-      setLoading(false);
-    });
-  }, []);
+    checkAuthAndLoad();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [router]);
 
   const handleOpenEdit = (profile?: Profile) => {
     setProfileToEdit(profile || currentUser || profiles[0] || null);
