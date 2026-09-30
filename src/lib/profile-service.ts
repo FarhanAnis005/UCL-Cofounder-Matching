@@ -6,8 +6,21 @@ const LOCAL_STORAGE_PROFILES_KEY = 'ucl_cohort_profiles_v1';
 const LOCAL_STORAGE_CURRENT_USER_KEY = 'ucl_current_user_v1';
 
 export async function getProfiles(): Promise<Profile[]> {
+  // 1. Primary: Fetch via Prisma API endpoint
+  try {
+    const res = await fetch('/api/profiles', { cache: 'no-store' });
+    if (res.ok) {
+      const data = await res.json();
+      if (data?.profiles && Array.isArray(data.profiles)) {
+        return data.profiles as Profile[];
+      }
+    }
+  } catch (apiErr) {
+    console.warn('Prisma API fetch error, checking Supabase client:', apiErr);
+  }
+
+  // 2. Direct Supabase client
   const supabase = createClient();
-  
   if (supabase) {
     try {
       const { data, error } = await supabase
@@ -16,7 +29,6 @@ export async function getProfiles(): Promise<Profile[]> {
         .order('created_at', { ascending: false });
 
       if (!error && data) {
-        // Exclude any legacy mock seed IDs if any existed
         return (data as Profile[]).filter((p) => !p.id.startsWith('ucl-seed-'));
       }
     } catch (err) {
@@ -167,6 +179,33 @@ export async function saveProfile(formData: OnboardingFormData, existingId?: str
     created_at: new Date().toISOString(),
   };
 
+  // 1. Primary: Save via Prisma API endpoint
+  try {
+    const res = await fetch('/api/profiles', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(profileRecord),
+    });
+
+    if (res.ok) {
+      const json = await res.json();
+      if (json?.profile) {
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(LOCAL_STORAGE_CURRENT_USER_KEY, JSON.stringify(json.profile));
+        }
+        return { success: true, profile: json.profile };
+      }
+    } else {
+      const errJson = await res.json().catch(() => null);
+      if (errJson?.error && !errJson.error.includes('DATABASE_URL')) {
+        return { success: false, error: errJson.error };
+      }
+    }
+  } catch (apiErr) {
+    console.warn('Prisma API save failed, trying Supabase direct:', apiErr);
+  }
+
+  // 2. Direct Supabase client
   if (supabase) {
     try {
       const { error } = await supabase
@@ -197,7 +236,7 @@ export async function saveProfile(formData: OnboardingFormData, existingId?: str
         return {
           success: false,
           error: error.message.includes('schema cache') || error.code === 'PGRST205'
-            ? "Table 'profiles' not found in Supabase. Please run the schema.sql in Supabase SQL Editor to create it."
+            ? "Table 'profiles' not found in Supabase. Please configure DATABASE_URL in .env to run prisma db push, or run schema.sql in Supabase SQL editor."
             : error.message,
         };
       }
@@ -266,6 +305,18 @@ export async function signOutUser(): Promise<void> {
 }
 
 export async function deleteProfile(profileId: string): Promise<{ success: boolean; error?: string }> {
+  // 1. Primary: Delete via Prisma API endpoint
+  try {
+    const res = await fetch(`/api/profiles?id=${encodeURIComponent(profileId)}`, {
+      method: 'DELETE',
+    });
+    if (res.ok) {
+      // deleted successfully via Prisma
+    }
+  } catch (apiErr) {
+    console.warn('Prisma API delete error:', apiErr);
+  }
+
   const supabase = createClient();
   let supabaseError: string | undefined;
 
