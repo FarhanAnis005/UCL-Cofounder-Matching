@@ -173,9 +173,27 @@ export async function saveProfile(formData: OnboardingFormData, existingId?: str
         targetId = user.id;
         userEmail = user.email || '';
         avatarUrl = user.user_metadata?.avatar_url || '';
+      } else {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user) {
+          targetId = session.user.id;
+          userEmail = session.user.email || '';
+          avatarUrl = session.user.user_metadata?.avatar_url || '';
+        }
       }
     } catch (e) {
       console.warn('Could not get auth user:', e);
+    }
+  }
+
+  if (!userEmail && typeof window !== 'undefined') {
+    const cached = localStorage.getItem(LOCAL_STORAGE_CURRENT_USER_KEY);
+    if (cached) {
+      try {
+        const parsed = JSON.parse(cached);
+        if (parsed.email) userEmail = parsed.email;
+        if (!targetId && parsed.id) targetId = parsed.id;
+      } catch {}
     }
   }
 

@@ -73,20 +73,20 @@ create policy "Authenticated users can view all profiles"
   to authenticated
   using (true);
 
--- Policy 2: Users can insert their own profile
-create policy "Users can insert their own profile"
+-- Policy 2: Users can insert cohort profiles
+create policy "Allow insert on profiles"
   on public.profiles
   for insert
-  to authenticated
-  with check (auth.uid() = id);
+  to authenticated, anon
+  with check (true);
 
--- Policy 3: Users can only update their own profile
-create policy "Users can update their own profile"
+-- Policy 3: Users can update profiles
+create policy "Allow update on profiles"
   on public.profiles
   for update
-  to authenticated
-  using (auth.uid() = id)
-  with check (auth.uid() = id);
+  to authenticated, anon
+  using (true)
+  with check (true);
 
 -- Policy 4: Allow anonymous/guest read access for open directory viewing
 create policy "Public can read profiles"
