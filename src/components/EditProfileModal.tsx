@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Profile, CurrentFocus, Superpower, LookingFor, Industry } from '@/lib/types';
-import { saveProfile } from '@/lib/profile-service';
+import { saveProfile, deleteProfile } from '@/lib/profile-service';
 import { isValidE164, sanitizePhoneForWhatsApp } from '@/lib/utils';
 import { FOCUS_OPTIONS, SUPERPOWER_OPTIONS, LOOKING_FOR_OPTIONS, INDUSTRY_OPTIONS, UCL_DEPARTMENTS } from '@/lib/constants';
 import { Button } from '@/components/ui/button';
@@ -21,6 +21,7 @@ import {
   Check,
   Loader2,
   Tag,
+  AlertTriangle,
 } from 'lucide-react';
 import { LinkedInIcon, GitHubIcon } from '@/components/ui/social-icons';
 
@@ -29,6 +30,7 @@ interface EditProfileModalProps {
   onClose: () => void;
   currentProfile: Profile | null;
   onSaved: (updated: Profile) => void;
+  onDeleted?: (deletedId: string) => void;
 }
 
 export function EditProfileModal({
@@ -36,6 +38,7 @@ export function EditProfileModal({
   onClose,
   currentProfile,
   onSaved,
+  onDeleted,
 }: EditProfileModalProps) {
   const [fullName, setFullName] = useState('');
   const [avatarUrl, setAvatarUrl] = useState('');
@@ -58,6 +61,8 @@ export function EditProfileModal({
   const [newCustomVal, setNewCustomVal] = useState('');
 
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
   useEffect(() => {
@@ -157,6 +162,25 @@ export function EditProfileModal({
       setErrorMsg(err?.message || 'Failed to update profile.');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!currentProfile?.id) return;
+    setDeleting(true);
+    setErrorMsg('');
+    try {
+      const res = await deleteProfile(currentProfile.id);
+      if (res.success) {
+        if (onDeleted) onDeleted(currentProfile.id);
+        onClose();
+      } else {
+        setErrorMsg(res.error || 'Failed to delete profile.');
+      }
+    } catch (err: any) {
+      setErrorMsg(err?.message || 'Failed to delete profile.');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -419,28 +443,72 @@ export function EditProfileModal({
         </div>
 
         {/* Modal Footer */}
-        <div className="p-4 border-t border-slate-800 bg-slate-950/60 flex items-center justify-between">
-          <Button variant="ghost" size="sm" onClick={onClose} disabled={saving} className="text-slate-400">
-            Cancel
-          </Button>
-
-          <Button
-            onClick={handleSave}
-            disabled={saving}
-            className="gap-2 bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold px-6 h-10 rounded-xl"
-          >
-            {saving ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                <span>Saving...</span>
-              </>
+        <div className="p-4 border-t border-slate-800 bg-slate-950/60 flex flex-wrap items-center justify-between gap-3">
+          {/* Delete Action on the left */}
+          <div>
+            {confirmDelete ? (
+              <div className="flex items-center gap-2 bg-rose-950/40 border border-rose-500/40 px-3 py-1.5 rounded-xl">
+                <AlertTriangle className="h-3.5 w-3.5 text-rose-400 shrink-0" />
+                <span className="text-xs text-rose-300 font-medium">Permanently remove?</span>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  size="sm"
+                  onClick={handleDelete}
+                  disabled={deleting}
+                  className="bg-rose-600 hover:bg-rose-500 text-white text-xs h-7 px-2.5 rounded-lg font-bold"
+                >
+                  {deleting ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Yes, Delete'}
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setConfirmDelete(false)}
+                  disabled={deleting}
+                  className="text-xs text-slate-400 hover:text-white h-7 px-2"
+                >
+                  Cancel
+                </Button>
+              </div>
             ) : (
-              <>
-                <Save className="h-4 w-4" />
-                <span>Save Profile Changes</span>
-              </>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => setConfirmDelete(true)}
+                className="text-xs text-rose-400 hover:text-rose-300 hover:bg-rose-950/40 gap-1.5 rounded-xl"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                <span>Delete Profile</span>
+              </Button>
             )}
-          </Button>
+          </div>
+
+          {/* Right Actions: Cancel and Save */}
+          <div className="flex items-center gap-2 ml-auto">
+            <Button variant="ghost" size="sm" onClick={onClose} disabled={saving || deleting} className="text-slate-400">
+              Cancel
+            </Button>
+
+            <Button
+              onClick={handleSave}
+              disabled={saving || deleting}
+              className="gap-2 bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold px-6 h-10 rounded-xl text-xs sm:text-sm shadow-md"
+            >
+              {saving ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span>Saving...</span>
+                </>
+              ) : (
+                <>
+                  <Save className="h-4 w-4" />
+                  <span>Save Profile Changes</span>
+                </>
+              )}
+            </Button>
+          </div>
         </div>
       </div>
     </div>

@@ -94,6 +94,13 @@ function FeedContent() {
     });
   };
 
+  const handleProfileDeleted = (deletedId: string) => {
+    setProfiles((prev) => prev.filter((p) => p.id !== deletedId));
+    if (currentUser?.id === deletedId) {
+      setCurrentUser(null);
+    }
+  };
+
   // Filter logic
   const filteredProfiles = useMemo(() => {
     return profiles.filter((p) => {
@@ -406,6 +413,7 @@ function FeedContent() {
         onClose={() => setIsEditModalOpen(false)}
         currentProfile={profileToEdit}
         onSaved={handleProfileUpdated}
+        onDeleted={handleProfileDeleted}
       />
 
       <footer className="py-6 border-t border-slate-800/60 text-center text-xs text-slate-500">

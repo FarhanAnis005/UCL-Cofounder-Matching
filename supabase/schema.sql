@@ -95,6 +95,13 @@ create policy "Public can read profiles"
   to anon
   using (true);
 
+-- Policy 5: Users can delete their own profile
+create policy "Users can delete their own profile"
+  on public.profiles
+  for delete
+  to authenticated
+  using (auth.uid() = id);
+
 -- =========================================================
 -- 6. SUPABASE STORAGE BUCKET: AVATARS
 -- =========================================================

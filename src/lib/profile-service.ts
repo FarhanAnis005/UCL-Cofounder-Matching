@@ -252,6 +252,67 @@ export async function signOutUser(): Promise<void> {
     localStorage.removeItem('ucl_auth_email_sent');
     localStorage.removeItem('ucl_email_otp');
     localStorage.removeItem('ucl_onboarding_temp');
+    localStorage.removeItem('ucl_pending_avatar');
+    localStorage.removeItem('ucl_pending_name');
     sessionStorage.clear();
+  }
+}
+
+export async function deleteProfile(profileId: string): Promise<{ success: boolean; error?: string }> {
+  const supabase = createClient();
+  let supabaseError: string | undefined;
+
+  if (supabase) {
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .delete()
+        .eq('id', profileId);
+
+      if (error) {
+        console.warn('Supabase profile delete error:', error.message);
+        supabaseError = error.message;
+      }
+    } catch (err: any) {
+      console.warn('Failed to delete profile from Supabase:', err);
+      supabaseError = err?.message;
+    }
+  }
+
+  // Remove from localStorage
+  if (typeof window !== 'undefined') {
+    const saved = localStorage.getItem(LOCAL_STORAGE_PROFILES_KEY);
+    if (saved) {
+      try {
+        const list = JSON.parse(saved) as Profile[];
+        const updated = list.filter((p) => p.id !== profileId);
+        localStorage.setItem(LOCAL_STORAGE_PROFILES_KEY, JSON.stringify(updated));
+      } catch (e) {
+        console.error('Failed to update local storage profiles:', e);
+      }
+    }
+
+    const cachedUser = localStorage.getItem(LOCAL_STORAGE_CURRENT_USER_KEY);
+    if (cachedUser) {
+      try {
+        const parsed = JSON.parse(cachedUser) as Profile;
+        if (parsed.id === profileId) {
+          localStorage.removeItem(LOCAL_STORAGE_CURRENT_USER_KEY);
+        }
+      } catch (e) {
+        console.error('Failed to clear cached user:', e);
+      }
+    }
+  }
+
+  return { success: !supabaseError, error: supabaseError };
+}
+
+export function clearLocalTestProfiles(): void {
+  if (typeof window !== 'undefined') {
+    localStorage.removeItem(LOCAL_STORAGE_PROFILES_KEY);
+    localStorage.removeItem(LOCAL_STORAGE_CURRENT_USER_KEY);
+    localStorage.removeItem('ucl_pending_avatar');
+    localStorage.removeItem('ucl_pending_name');
   }
 }

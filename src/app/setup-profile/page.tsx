@@ -3,7 +3,7 @@
 import React, { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { OnboardingFormData } from '@/lib/types';
-import { getCurrentUserProfile, saveProfile, signOutUser } from '@/lib/profile-service';
+import { getCurrentUserProfile, saveProfile, signOutUser, deleteProfile } from '@/lib/profile-service';
 import { createClient } from '@/lib/supabase/client';
 import { inferNameFromUclEmail } from '@/lib/auth-utils';
 import { OnboardingStep1 } from '@/components/OnboardingStep1';
@@ -11,7 +11,8 @@ import { OnboardingStep2 } from '@/components/OnboardingStep2';
 import { OnboardingStep3 } from '@/components/OnboardingStep3';
 import { OnboardingStep4 } from '@/components/OnboardingStep4';
 import { Navbar } from '@/components/Navbar';
-import { ArrowLeft, LogOut } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { ArrowLeft, LogOut, Trash2, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 
 function SetupProfileContent() {
@@ -21,6 +22,9 @@ function SetupProfileContent() {
 
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
   const [existingUserId, setExistingUserId] = useState<string | undefined>(undefined);
   const [userEmail, setUserEmail] = useState<string>(emailParam);
 
@@ -132,6 +136,24 @@ function SetupProfileContent() {
     }
   };
 
+  const handleDeleteProfile = async () => {
+    if (!existingUserId) return;
+    setIsDeleting(true);
+    setDeleteError('');
+    try {
+      const res = await deleteProfile(existingUserId);
+      if (res.success) {
+        await handleSignOut();
+      } else {
+        setDeleteError(res.error || 'Failed to delete profile.');
+        setIsDeleting(false);
+      }
+    } catch (e: any) {
+      setDeleteError(e?.message || 'Failed to delete profile.');
+      setIsDeleting(false);
+    }
+  };
+
   const stepTitles = [
     '1. The Basics',
     '2. Superpowers',
@@ -230,6 +252,61 @@ function SetupProfileContent() {
             />
           )}
         </div>
+
+        {/* Danger Zone: Delete Profile */}
+        {existingUserId && (
+          <div className="mt-8 p-5 rounded-2xl border border-rose-900/30 bg-rose-950/15 backdrop-blur-md flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 animate-in fade-in">
+            <div>
+              <h4 className="text-xs font-bold text-rose-300 uppercase tracking-wider flex items-center gap-1.5">
+                <Trash2 className="h-3.5 w-3.5 text-rose-400" />
+                <span>Delete Profile</span>
+              </h4>
+              <p className="text-xs text-slate-400 mt-1">
+                Permanently delete your profile and remove your card from the UCL Cohort Directory.
+              </p>
+              {deleteError && (
+                <p className="text-xs text-rose-400 mt-1 font-medium">{deleteError}</p>
+              )}
+            </div>
+
+            {showDeleteConfirm ? (
+              <div className="flex items-center gap-2 shrink-0">
+                <Button
+                  type="button"
+                  variant="destructive"
+                  size="sm"
+                  onClick={handleDeleteProfile}
+                  disabled={isDeleting}
+                  className="bg-rose-600 hover:bg-rose-500 text-white text-xs h-9 px-3.5 rounded-xl font-bold gap-1.5"
+                >
+                  {isDeleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                  <span>Confirm Delete</span>
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowDeleteConfirm(false)}
+                  disabled={isDeleting}
+                  className="text-xs text-slate-400 hover:text-white h-9 px-2"
+                >
+                  Cancel
+                </Button>
+              </div>
+            ) : (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setShowDeleteConfirm(true)}
+                className="shrink-0 border-rose-900/50 hover:border-rose-500/50 hover:bg-rose-950/30 text-rose-300 text-xs h-9 px-3.5 rounded-xl transition-colors font-medium gap-1.5"
+              >
+                <Trash2 className="h-3.5 w-3.5 text-rose-400" />
+                <span>Delete My Profile</span>
+              </Button>
+            )}
+          </div>
+        )}
 
         {/* Return to feed */}
         <div className="mt-6 text-center">
