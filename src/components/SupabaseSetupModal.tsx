@@ -117,10 +117,10 @@ export function SupabaseSetupModal({ isOpen, onClose, isConfigured }: SupabaseSe
           <div className="space-y-2 border-t border-slate-800 pt-3">
             <p className="text-xs font-semibold text-slate-200">How to activate in 60 seconds:</p>
             <ol className="list-decimal list-inside text-xs text-slate-400 space-y-1.5">
-              <li>Create a free project at <span className="text-sky-400">supabase.com</span>.</li>
-              <li>Open <strong className="text-white">SQL Editor</strong>, paste the snippet above, and click <strong className="text-white">Run</strong>.</li>
-              <li>Go to <strong className="text-white">Project Settings &gt; API</strong>, copy URL and Anon Key into <code className="text-sky-300">.env.local</code>.</li>
-              <li>Enable <strong className="text-white">Google</strong> or <strong className="text-white">LinkedIn</strong> under Authentication &gt; Providers.</li>
+              <li>Open your project at <span className="text-sky-400">supabase.com</span>.</li>
+              <li>In <strong className="text-white">SQL Editor</strong>, paste the snippet above and click <strong className="text-white">Run</strong>.</li>
+              <li>In <strong className="text-white">Authentication &gt; Providers &gt; Email</strong>, toggle OFF <strong className="text-emerald-400">"Confirm email"</strong> (allows instant registration with zero rate limits and no custom domain required).</li>
+              <li>Ensure your project URL &amp; anon key are set in Vercel / <code className="text-sky-300">.env</code>.</li>
             </ol>
           </div>
         </div>

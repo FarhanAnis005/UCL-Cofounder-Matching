@@ -16,23 +16,33 @@ import {
   Users,
   Database,
   Mail,
+  Lock,
+  Eye,
+  EyeOff,
   AlertCircle,
   CheckCircle2,
   Loader2,
-  RefreshCw,
-  ExternalLink,
   LogOut,
+  UserPlus,
+  LogIn,
+  KeyRound,
+  Info,
 } from 'lucide-react';
 import { SupabaseSetupModal } from '@/components/SupabaseSetupModal';
 import { AvatarUpload } from '@/components/ui/avatar-upload';
 
+type AuthMode = 'signup' | 'signin';
+
 export default function LandingPage() {
   const router = useRouter();
+  const [authMode, setAuthMode] = useState<AuthMode>('signup');
   const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState('');
-  const [linkSent, setLinkSent] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [infoMessage, setInfoMessage] = useState('');
   const [isConfigured, setIsConfigured] = useState(false);
   const [showDbModal, setShowDbModal] = useState(false);
   const [loggedInUser, setLoggedInUser] = useState<{ id: string; email: string } | null>(null);
@@ -49,14 +59,12 @@ export default function LandingPage() {
         }
       });
 
-      // Listen for auth changes: if the student clicks the Magic Link in any tab/window,
-      // this tab automatically detects the session and advances!
+      // Listen for auth state changes
       const {
         data: { subscription },
-      } = supabase.auth.onAuthStateChange(async (event, session) => {
+      } = supabase.auth.onAuthStateChange(async (_event, session) => {
         if (session?.user) {
           setLoggedInUser({ id: session.user.id, email: session.user.email || '' });
-          await handlePostAuthRouting(session.user.id, session.user.email || '');
         } else {
           setLoggedInUser(null);
         }
@@ -66,7 +74,7 @@ export default function LandingPage() {
         subscription.unsubscribe();
       };
     } else {
-      // Check if user is already logged in
+      // Check if user has an existing saved profile in localStorage
       getCurrentUserProfile().then((profile) => {
         if (profile && profile.phone) {
           router.push('/feed');
@@ -78,15 +86,21 @@ export default function LandingPage() {
   const handleSignOut = async () => {
     await signOutUser();
     setLoggedInUser(null);
-    setLinkSent(false);
     setEmail('');
+    setPassword('');
+    setErrorMessage('');
+    setInfoMessage('');
     router.refresh();
   };
 
-  const validateInput = (): boolean => {
-    const error = getUclEmailError(email);
-    if (error) {
-      setErrorMessage(error);
+  const validateInputs = (): boolean => {
+    const emailErr = getUclEmailError(email);
+    if (emailErr) {
+      setErrorMessage(emailErr);
+      return false;
+    }
+    if (!password || password.length < 6) {
+      setErrorMessage('Password must be at least 6 characters long.');
       return false;
     }
     setErrorMessage('');
@@ -101,24 +115,25 @@ export default function LandingPage() {
         .from('profiles')
         .select('id, phone')
         .eq('id', userId)
-        .single();
+        .maybeSingle();
 
       if (profile && profile.phone) {
         router.push('/feed');
         return;
       }
     }
-    // New student without completed profile
+    // Student without completed profile
     router.push(`/setup-profile?email=${encodeURIComponent(userEmail)}`);
   };
 
-  // Send One-Click Magic Link
-  const handleSendMagicLink = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    if (!validateInput()) return;
+  // Handle Sign Up
+  const handleSignUp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!validateInputs()) return;
 
     setLoading(true);
     setErrorMessage('');
+    setInfoMessage('');
 
     if (avatarUrl && typeof window !== 'undefined') {
       localStorage.setItem('ucl_pending_avatar', avatarUrl);
@@ -127,19 +142,18 @@ export default function LandingPage() {
     const supabase = createClient();
 
     if (!supabase) {
-      // Demo / Preview Mode when Supabase is not linked
+      // Fallback preview mode when keys are not configured yet
       setLoading(false);
-      setLinkSent(true);
+      router.push(`/setup-profile?email=${encodeURIComponent(email.trim().toLowerCase())}`);
       return;
     }
 
     try {
-      const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
-      const { error } = await supabase.auth.signInWithOtp({
-        email: email.trim().toLowerCase(),
+      const cleanEmail = email.trim().toLowerCase();
+      const { data, error } = await supabase.auth.signUp({
+        email: cleanEmail,
+        password: password,
         options: {
-          shouldCreateUser: true,
-          emailRedirectTo: `${origin}/auth/callback`,
           data: {
             avatar_url: avatarUrl || undefined,
           },
@@ -147,12 +161,73 @@ export default function LandingPage() {
       });
 
       if (error) {
-        setErrorMessage(error.message);
-      } else {
-        setLinkSent(true);
+        if (error.message.toLowerCase().includes('already registered')) {
+          setErrorMessage('This UCL email is already registered. Please switch to the Sign In tab.');
+          setAuthMode('signin');
+        } else {
+          setErrorMessage(error.message);
+        }
+        return;
+      }
+
+      // If Supabase has "Confirm email" disabled, session is returned immediately!
+      if (data.session && data.user) {
+        setLoggedInUser({ id: data.user.id, email: data.user.email || cleanEmail });
+        await handlePostAuthRouting(data.user.id, cleanEmail);
+      } else if (data.user) {
+        // If email confirmation is still turned on in their Supabase dashboard
+        setInfoMessage(
+          'Account created! If your Supabase project requires email confirmation, please check your UCL inbox. (Tip: Turn off "Confirm email" in Supabase to log in instantly without email confirmation).'
+        );
       }
     } catch (err: any) {
-      setErrorMessage(err?.message || 'Failed to send login link.');
+      setErrorMessage(err?.message || 'Failed to create account.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Handle Sign In
+  const handleSignIn = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!validateInputs()) return;
+
+    setLoading(true);
+    setErrorMessage('');
+    setInfoMessage('');
+
+    const supabase = createClient();
+
+    if (!supabase) {
+      setLoading(false);
+      router.push('/feed');
+      return;
+    }
+
+    try {
+      const cleanEmail = email.trim().toLowerCase();
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: cleanEmail,
+        password: password,
+      });
+
+      if (error) {
+        if (error.message.toLowerCase().includes('invalid login credentials')) {
+          setErrorMessage('Invalid UCL email or password. Please verify your details or create an account.');
+        } else if (error.message.toLowerCase().includes('email not confirmed')) {
+          setErrorMessage('Email not confirmed. Turn off "Confirm email" in your Supabase Auth settings for instant access.');
+        } else {
+          setErrorMessage(error.message);
+        }
+        return;
+      }
+
+      if (data.user) {
+        setLoggedInUser({ id: data.user.id, email: data.user.email || cleanEmail });
+        await handlePostAuthRouting(data.user.id, cleanEmail);
+      }
+    } catch (err: any) {
+      setErrorMessage(err?.message || 'Failed to sign in.');
     } finally {
       setLoading(false);
     }
@@ -247,11 +322,11 @@ export default function LandingPage() {
 
         {/* Hero Subtitle */}
         <p className="mt-4 text-base sm:text-lg text-slate-300 max-w-2xl leading-relaxed">
-          The lightweight directory for UCL founders, designers, and engineers.
+          The verified directory for UCL founders, designers, and engineers.
           All introductions route directly to WhatsApp with zero in-app friction.
         </p>
 
-        {/* Dedicated UCL Auth Card: 100% Focused on Magic Link */}
+        {/* Dedicated UCL Auth Card */}
         <div className="mt-8 w-full max-w-md p-6 sm:p-8 rounded-3xl border border-slate-800/80 bg-slate-900/70 backdrop-blur-2xl shadow-2xl space-y-5 text-left">
           {loggedInUser ? (
             <div className="space-y-4 text-center py-2">
@@ -284,171 +359,222 @@ export default function LandingPage() {
             </div>
           ) : (
             <>
-              {/* Header */}
-              <div className="text-center">
-                <div className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-sky-400 mb-1">
-                  <ShieldCheck className="h-4 w-4" />
-                  <span>Official Student Portal</span>
-                </div>
-                <h2 className="text-xl font-bold text-white">Sign In with UCL Email</h2>
-                <p className="text-xs text-slate-400 mt-1">
-                  Strictly restricted to <strong className="text-slate-200">@ucl.ac.uk</strong> addresses
-                </p>
-              </div>
-
-          {/* Error Banner */}
-          {errorMessage && (
-            <div className="rounded-xl border border-red-500/40 bg-red-950/30 p-3 text-xs text-red-300 flex items-start gap-2 animate-in fade-in">
-              <AlertCircle className="h-4 w-4 shrink-0 mt-0.5 text-red-400" />
-              <span>{errorMessage}</span>
-            </div>
-          )}
-
-          {/* SCREEN 1: Enter UCL Email & Photo */}
-          {!linkSent ? (
-            <form onSubmit={handleSendMagicLink} className="space-y-4">
-              {/* Photo Upload during Sign Up */}
-              <div className="p-3.5 rounded-2xl border border-slate-800 bg-slate-950/70">
-                <AvatarUpload
-                  value={avatarUrl}
-                  onChange={setAvatarUrl}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-bold uppercase tracking-wider text-slate-300">
-                    UCL Student Email *
-                  </label>
-                  {email && (
-                    <span className={`text-[11px] font-medium ${emailIsValidUcl ? 'text-emerald-400' : 'text-amber-400'}`}>
-                      {emailIsValidUcl ? '✓ Valid UCL Domain' : 'Must be @ucl.ac.uk'}
-                    </span>
-                  )}
-                </div>
-
-                <div className="relative">
-                  <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                  <Input
-                    type="email"
-                    value={email}
-                    onChange={(e) => {
-                      setEmail(e.target.value);
-                      setErrorMessage('');
-                    }}
-                    placeholder="zcabfqu@ucl.ac.uk"
-                    required
-                    autoFocus
-                    className="pl-10 h-12 bg-slate-950/80 border-slate-800 text-sm font-mono"
-                  />
-                </div>
-                <p className="text-[11px] text-slate-500">
-                  Accepts @ucl.ac.uk and departmental subdomains (e.g. @cs.ucl.ac.uk).
-                </p>
-              </div>
-
-              <Button
-                type="submit"
-                disabled={loading}
-                className="w-full h-12 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold gap-2 text-sm shadow-md"
-              >
-                {loading ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    <span>Sending Login Link...</span>
-                  </>
-                ) : (
-                  <>
-                    <span>Send One-Click Login Link</span>
-                    <ArrowRight className="h-4 w-4" />
-                  </>
-                )}
-              </Button>
-            </form>
-          ) : (
-            /* SCREEN 2: Magic Link Sent - Pure Click-to-Login */
-            <div className="space-y-4 animate-in fade-in duration-300">
-              <div className="rounded-2xl border border-emerald-500/30 bg-emerald-950/30 p-5 space-y-3 text-center">
-                <div className="h-12 w-12 rounded-2xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 mx-auto">
-                  <Mail className="h-6 w-6 animate-bounce" />
-                </div>
-
-                {avatarUrl && (
-                  <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-900 border border-slate-800 text-xs text-slate-300 mx-auto">
-                    <img src={avatarUrl} alt="Photo attached" className="h-5 w-5 rounded-full object-cover border border-sky-400" />
-                    <span>Photo attached to profile</span>
-                  </div>
-                )}
-
-                <div>
-                  <h3 className="font-bold text-white text-base">Check Your UCL Inbox</h3>
-                  <p className="text-xs text-slate-300 mt-1">
-                    We just sent a login link to:
-                  </p>
-                  <p className="font-mono text-xs text-emerald-400 font-semibold mt-0.5 break-all">
-                    {email}
-                  </p>
-                </div>
-
-                <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800 text-xs text-slate-300 text-left space-y-1.5">
-                  <div className="flex items-center gap-1.5 text-sky-400 font-semibold">
-                    <CheckCircle2 className="h-4 w-4" />
-                    <span>Next step:</span>
-                  </div>
-                  <p className="text-slate-300">
-                    Click the <strong className="text-white">"Log In"</strong> button inside the email.
-                  </p>
-                  <p className="text-[11px] text-slate-400 pt-1">
-                    💡 This tab will automatically detect your login and advance immediately!
-                  </p>
-                </div>
-
-                {/* Radar pulse indicator */}
-                <div className="flex items-center justify-center gap-2 text-xs text-slate-400 pt-1">
-                  <span className="h-2 w-2 rounded-full bg-emerald-400 animate-ping" />
-                  <span>Waiting for login link click...</span>
-                </div>
-              </div>
-
-              {/* Actions: Resend or Change Email */}
-              <div className="flex items-center justify-between text-xs pt-1">
+              {/* Tab Switcher: Join Cohort vs Sign In */}
+              <div className="flex rounded-2xl bg-slate-950/80 p-1 border border-slate-800/80">
                 <button
                   type="button"
                   onClick={() => {
-                    setLinkSent(false);
+                    setAuthMode('signup');
                     setErrorMessage('');
+                    setInfoMessage('');
                   }}
-                  className="text-slate-400 hover:text-white transition-colors"
+                  className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                    authMode === 'signup'
+                      ? 'bg-gradient-to-r from-sky-500 to-indigo-600 text-white shadow-md'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
                 >
-                  &larr; Use different email
+                  <UserPlus className="h-3.5 w-3.5" />
+                  <span>Join Cohort (Sign Up)</span>
                 </button>
-
                 <button
                   type="button"
-                  onClick={() => handleSendMagicLink()}
-                  disabled={loading}
-                  className="text-sky-400 hover:underline inline-flex items-center gap-1"
+                  onClick={() => {
+                    setAuthMode('signin');
+                    setErrorMessage('');
+                    setInfoMessage('');
+                  }}
+                  className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                    authMode === 'signin'
+                      ? 'bg-gradient-to-r from-sky-500 to-indigo-600 text-white shadow-md'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
                 >
-                  <RefreshCw className="h-3 w-3" />
-                  <span>Resend link</span>
+                  <LogIn className="h-3.5 w-3.5" />
+                  <span>Sign In</span>
                 </button>
               </div>
-            </div>
-          )}
 
-          {/* Quick Setup or Feed Entry */}
-          <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-400">
-            <Link
-              href="/setup-profile"
-              className="text-sky-400 hover:text-sky-300 font-medium inline-flex items-center gap-1"
-            >
-              <Sparkles className="h-3.5 w-3.5" />
-              <span>Direct Setup Funnel &rarr;</span>
-            </Link>
-            <Link href="/feed" className="hover:text-white transition-colors">
-              Browse Cohort Directory &rarr;
-            </Link>
-          </div>
+              {/* Subheader */}
+              <div className="text-center pt-1">
+                <div className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-sky-400 mb-1">
+                  <ShieldCheck className="h-4 w-4" />
+                  <span>UCL Verification Required</span>
+                </div>
+                <h2 className="text-xl font-bold text-white">
+                  {authMode === 'signup' ? 'Create UCL Founder Account' : 'Welcome Back'}
+                </h2>
+                <p className="text-xs text-slate-400 mt-1">
+                  Restricted to verified <strong className="text-slate-200">@ucl.ac.uk</strong> emails
+                </p>
+              </div>
+
+              {/* Error Banner */}
+              {errorMessage && (
+                <div className="rounded-xl border border-red-500/40 bg-red-950/30 p-3 text-xs text-red-300 flex items-start gap-2 animate-in fade-in">
+                  <AlertCircle className="h-4 w-4 shrink-0 mt-0.5 text-red-400" />
+                  <span>{errorMessage}</span>
+                </div>
+              )}
+
+              {/* Info Banner */}
+              {infoMessage && (
+                <div className="rounded-xl border border-emerald-500/40 bg-emerald-950/30 p-3 text-xs text-emerald-300 flex items-start gap-2 animate-in fade-in">
+                  <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5 text-emerald-400" />
+                  <span>{infoMessage}</span>
+                </div>
+              )}
+
+              {/* Auth Form */}
+              <form onSubmit={authMode === 'signup' ? handleSignUp : handleSignIn} className="space-y-4">
+                {/* Photo Upload ONLY during Sign Up */}
+                {authMode === 'signup' && (
+                  <div className="p-3.5 rounded-2xl border border-slate-800 bg-slate-950/70">
+                    <AvatarUpload
+                      value={avatarUrl}
+                      onChange={setAvatarUrl}
+                    />
+                  </div>
+                )}
+
+                {/* Email Field */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold uppercase tracking-wider text-slate-300">
+                      UCL Email *
+                    </label>
+                    {email && (
+                      <span className={`text-[11px] font-medium ${emailIsValidUcl ? 'text-emerald-400' : 'text-amber-400'}`}>
+                        {emailIsValidUcl ? '✓ Valid UCL Domain' : 'Must be @ucl.ac.uk'}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="relative">
+                    <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                    <Input
+                      type="email"
+                      value={email}
+                      onChange={(e) => {
+                        setEmail(e.target.value);
+                        setErrorMessage('');
+                        setInfoMessage('');
+                      }}
+                      placeholder="zcabfqu@ucl.ac.uk"
+                      required
+                      autoFocus
+                      className="pl-10 h-11 bg-slate-950/80 border-slate-800 text-sm font-mono"
+                    />
+                  </div>
+                </div>
+
+                {/* Password Field */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold uppercase tracking-wider text-slate-300">
+                      Password *
+                    </label>
+                    {authMode === 'signup' && (
+                      <span className="text-[11px] text-slate-400">
+                        Min. 6 characters
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="relative">
+                    <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                    <Input
+                      type={showPassword ? 'text' : 'password'}
+                      value={password}
+                      onChange={(e) => {
+                        setPassword(e.target.value);
+                        setErrorMessage('');
+                        setInfoMessage('');
+                      }}
+                      placeholder="••••••••••••"
+                      required
+                      minLength={6}
+                      className="pl-10 pr-10 h-11 bg-slate-950/80 border-slate-800 text-sm"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition-colors"
+                      tabIndex={-1}
+                    >
+                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Submit Button */}
+                <Button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full h-12 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold gap-2 text-sm shadow-md mt-2"
+                >
+                  {loading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span>{authMode === 'signup' ? 'Creating Account...' : 'Signing In...'}</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>{authMode === 'signup' ? 'Create Account & Continue' : 'Sign In to Directory'}</span>
+                      <ArrowRight className="h-4 w-4" />
+                    </>
+                  )}
+                </Button>
+              </form>
+
+              {/* Toggle Switch Prompt */}
+              <div className="pt-2 text-center text-xs text-slate-400">
+                {authMode === 'signup' ? (
+                  <span>
+                    Already have an account?{' '}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAuthMode('signin');
+                        setErrorMessage('');
+                        setInfoMessage('');
+                      }}
+                      className="text-sky-400 hover:underline font-semibold"
+                    >
+                      Sign In here
+                    </button>
+                  </span>
+                ) : (
+                  <span>
+                    New to UCL Cohort?{' '}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAuthMode('signup');
+                        setErrorMessage('');
+                        setInfoMessage('');
+                      }}
+                      className="text-sky-400 hover:underline font-semibold"
+                    >
+                      Join Cohort here
+                    </button>
+                  </span>
+                )}
+              </div>
+
+              {/* Quick Direct Links */}
+              <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-400">
+                <Link
+                  href="/setup-profile"
+                  className="text-sky-400 hover:text-sky-300 font-medium inline-flex items-center gap-1"
+                >
+                  <Sparkles className="h-3.5 w-3.5" />
+                  <span>Direct Profile Setup &rarr;</span>
+                </Link>
+                <Link href="/feed" className="hover:text-white transition-colors">
+                  Browse Directory &rarr;
+                </Link>
+              </div>
             </>
           )}
         </div>
