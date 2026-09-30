@@ -22,6 +22,7 @@ function SetupProfileContent() {
 
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteError, setDeleteError] = useState('');
@@ -123,15 +124,20 @@ function SetupProfileContent() {
 
   const handleFinalSubmit = async () => {
     setIsSubmitting(true);
+    setSubmitError('');
     try {
       const res = await saveProfile(formData, existingUserId);
       if (res.success) {
         setTimeout(() => {
           router.push('/feed?welcome=true');
         }, 500);
+      } else {
+        setSubmitError(res.error || 'Failed to save profile to Supabase database.');
+        setIsSubmitting(false);
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error('Failed to save profile:', e);
+      setSubmitError(e?.message || 'Failed to save profile.');
       setIsSubmitting(false);
     }
   };
@@ -243,13 +249,21 @@ function SetupProfileContent() {
           )}
 
           {step === 4 && (
-            <OnboardingStep4
-              formData={formData}
-              updateFormData={updateFormData}
-              onBack={() => setStep(3)}
-              onSubmit={handleFinalSubmit}
-              isSubmitting={isSubmitting}
-            />
+            <div className="space-y-4">
+              {submitError && (
+                <div className="p-3.5 rounded-xl border border-rose-500/40 bg-rose-950/30 text-xs text-rose-300">
+                  <p className="font-semibold text-rose-200">Supabase Error:</p>
+                  <p className="mt-0.5">{submitError}</p>
+                </div>
+              )}
+              <OnboardingStep4
+                formData={formData}
+                updateFormData={updateFormData}
+                onBack={() => setStep(3)}
+                onSubmit={handleFinalSubmit}
+                isSubmitting={isSubmitting}
+              />
+            </div>
           )}
         </div>
 

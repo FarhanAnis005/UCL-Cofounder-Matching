@@ -193,10 +193,17 @@ export async function saveProfile(formData: OnboardingFormData, existingId?: str
         });
 
       if (error) {
-        console.warn('Supabase upsert returned error (falling back to local):', error.message);
+        console.error('Supabase upsert failed:', error.message);
+        return {
+          success: false,
+          error: error.message.includes('schema cache') || error.code === 'PGRST205'
+            ? "Table 'profiles' not found in Supabase. Please run the schema.sql in Supabase SQL Editor to create it."
+            : error.message,
+        };
       }
-    } catch (err) {
-      console.warn('Supabase profile save error:', err);
+    } catch (err: any) {
+      console.error('Supabase profile save error:', err);
+      return { success: false, error: err?.message || 'Failed to save to Supabase database.' };
     }
   }
 
